@@ -41,26 +41,35 @@ DATA = [
   {"region":"amer","latency_ms":182.0,"uptime_pct":98.808}
 ]
 
+CORS_HEADERS = [
+    ("Access-Control-Allow-Origin", "*"),
+    ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
+    ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
+    ("Access-Control-Max-Age", "86400"),
+]
+
 class handler(BaseHTTPRequestHandler):
+    def send_cors(self):
+        for k, v in CORS_HEADERS:
+            self.send_header(k, v)
+
     def do_OPTIONS(self):
-        self.send_response(200)
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_response(204)
+        self.send_cors()
         self.end_headers()
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_cors()
+        self.end_headers()
+        self.wfile.write(json.dumps({"status": "ok"}).encode())
 
     def do_POST(self):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length))
         regions = body.get("regions", [])
         threshold = body.get("threshold_ms", 0)
-
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        self.wfile.write(json.dumps({"status": "ok"}).encode())
 
         result = {}
         for region in regions:
@@ -76,8 +85,6 @@ class handler(BaseHTTPRequestHandler):
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_cors()
         self.end_headers()
         self.wfile.write(json.dumps(result).encode())

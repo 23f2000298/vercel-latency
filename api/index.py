@@ -1,6 +1,8 @@
-from http.server import BaseHTTPRequestHandler
-import json
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 import numpy as np
+
+app = FastAPI()
 
 DATA = [
   {"region":"apac","latency_ms":190.43,"uptime_pct":99.376},
@@ -41,50 +43,30 @@ DATA = [
   {"region":"amer","latency_ms":182.0,"uptime_pct":98.808}
 ]
 
-CORS_HEADERS = [
-    ("Access-Control-Allow-Origin", "*"),
-    ("Access-Control-Allow-Methods", "GET, POST, OPTIONS"),
-    ("Access-Control-Allow-Headers", "Content-Type, Authorization"),
-    ("Access-Control-Max-Age", "86400"),
-]
+CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+}
 
-class handler(BaseHTTPRequestHandler):
-    def send_cors(self):
-        for k, v in CORS_HEADERS:
-            self.send_header(k, v)
+@app.options("/{rest:path}")
+async def preflight(rest: str):
+    return JSONResponse(content={}, headers=CORS)
 
-    def do_OPTIONS(self):
-        self.send_response(204)
-        self.send_cors()
-        self.end_headers()
-
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_cors()
-        self.end_headers()
-        self.wfile.write(json.dumps({"status": "ok"}).encode())
-
-    def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-        body = json.loads(self.rfile.read(length))
-        regions = body.get("regions", [])
-        threshold = body.get("threshold_ms", 0)
-
-        result = {}
-        for region in regions:
-            records = [r for r in DATA if r["region"] == region]
-            latencies = [r["latency_ms"] for r in records]
-            uptimes = [r["uptime_pct"] for r in records]
-            result[region] = {
-                "avg_latency": round(float(np.mean(latencies)), 2),
-                "p95_latency": round(float(np.percentile(latencies, 95)), 2),
-                "avg_uptime": round(float(np.mean(uptimes)), 4),
-                "breaches": int(sum(1 for l in latencies if l > threshold))
-            }
-
-        self.send_response(200)
-        self.send_header("Content-Type", "application/json")
-        self.send_cors()
-        self.end_headers()
-        self.wfile.write(json.dumps(result).encode())
+@app.post("/{rest:path}")
+async def analyze(rest: str, request: Request):
+    body = await request.json()
+    regions = body.get("regions", [])
+    threshold = body.get("threshold_ms", 0)
+    result = {}
+    for region in regions:
+        records = [r for r in DATA if r["region"] == region]
+        latencies = [r["latency_ms"] for r in records]
+        uptimes = [r["uptime_pct"] for r in records]
+        result[region] = {
+            "avg_latency": round(float(np.mean(latencies)), 2),
+            "p95_latency": round(float(np.percentile(latencies, 95)), 2),
+            "avg_uptime": round(float(np.mean(uptimes)), 4),
+            "breaches": int(sum(1 for l in latencies if l > threshold))
+        }
+    return JSONResponse(content=result, headers=CORS)

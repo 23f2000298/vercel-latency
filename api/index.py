@@ -3,10 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List
 import numpy as np
-import json, os
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 DATA = [
   {"region":"apac","latency_ms":190.43,"uptime_pct":99.376},
@@ -65,3 +71,7 @@ async def analyze(req: Request):
             "breaches": int(sum(1 for l in latencies if l > req.threshold_ms))
         }
     return result
+
+@app.options("/api")
+async def options():
+    return {}

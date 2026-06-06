@@ -1,18 +1,6 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import List
+from http.server import BaseHTTPRequestHandler
+import json
 import numpy as np
-
-app = FastAPI()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 DATA = [
   {"region":"apac","latency_ms":190.43,"uptime_pct":99.376},
@@ -53,25 +41,36 @@ DATA = [
   {"region":"amer","latency_ms":182.0,"uptime_pct":98.808}
 ]
 
-class Request(BaseModel):
-    regions: List[str]
-    threshold_ms: float
+class handler(BaseHTTPRequestHandler):
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
-@app.post("/api")
-async def analyze(req: Request):
-    result = {}
-    for region in req.regions:
-        records = [r for r in DATA if r["region"] == region]
-        latencies = [r["latency_ms"] for r in records]
-        uptimes = [r["uptime_pct"] for r in records]
-        result[region] = {
-            "avg_latency": round(float(np.mean(latencies)), 2),
-            "p95_latency": round(float(np.percentile(latencies, 95)), 2),
-            "avg_uptime": round(float(np.mean(uptimes)), 4),
-            "breaches": int(sum(1 for l in latencies if l > req.threshold_ms))
-        }
-    return result
+    def do_POST(self):
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length))
+        regions = body.get("regions", [])
+        threshold = body.get("threshold_ms", 0)
 
-@app.options("/api")
-async def options():
-    return {}
+        result = {}
+        for region in regions:
+            records = [r for r in DATA if r["region"] == region]
+            latencies = [r["latency_ms"] for r in records]
+            uptimes = [r["uptime_pct"] for r in records]
+            result[region] = {
+                "avg_latency": round(float(np.mean(latencies)), 2),
+                "p95_latency": round(float(np.percentile(latencies, 95)), 2),
+                "avg_uptime": round(float(np.mean(uptimes)), 4),
+                "breaches": int(sum(1 for l in latencies if l > threshold))
+            }
+
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(json.dumps(result).encode())
